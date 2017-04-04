@@ -1,0 +1,726 @@
+C51 COMPILER V9.52.0.0   PWM1                                                              02/20/2017 23:09:55 PAGE 1   
+
+
+C51 COMPILER V9.52.0.0, COMPILATION OF MODULE PWM1
+OBJECT MODULE PLACED IN pwm1.OBJ
+COMPILER INVOKED BY: D:\stm32\keilc51v4\C51\BIN\C51.EXE pwm1.c BROWSE DEBUG OBJECTEXTEND TABS(2)
+
+line level    source
+
+   1          //#include <reg52.h>
+   2          #include "12864.h"
+   3          #include <stdio.h>
+   4          #define uchar unsigned char
+   5          #define uint unsigned int
+   6          #define key_port P0 //键盘接口
+   7          sbit DIR = P1^0;
+   8          sbit EN = P1^1;
+   9          sbit PWM = P1^2;
+  10          sbit BEEP = P2^3;
+  11          
+  12           
+  13          
+  14          uchar keyscan();  //按键判断程序
+  15          
+  16          uint ms = 10;
+  17          int angle = 1;
+  18          uchar code dis1[] = {"转角:0.5圈"};
+  19          uchar code dis2[] = {"转速:30r/min"};
+  20          uchar code dis3[] = {"方向:+"};
+  21          uint count = 0;
+  22          uint t = 0;
+  23          uchar buf;
+  24          uchar num,temp;
+  25          
+  26          
+  27          void print_angle(void);
+  28          
+  29          void delay_ms(uint z) //delay0.01ms
+  30          {
+  31   1        uint x;
+  32   1        for(x=z;x>0;x--);
+  33   1      //    for(y=/*56 0.5ms*/ 27/*0.25ms*/;y>0;y--);
+  34   1      }
+  35          
+  36          void delay_1ms(uint m)
+  37          {
+  38   1        uint i, j, k;
+  39   1        for(i=0; i<m; i++)
+  40   1        {
+  41   2          for(j=0; j<10; j++)
+  42   2            for(k=0; k<33; k++);
+  43   2        }
+  44   1      }
+  45          
+  46          void delay10ms(void) //延时程序
+  47          {
+  48   1        unsigned char i,j;
+  49   1        for(i=20;i>0;i--)
+  50   1        for(j=248;j>0;j--);
+  51   1      }
+  52          
+  53          
+  54          
+  55          void Motor_Go(uint ms)
+C51 COMPILER V9.52.0.0   PWM1                                                              02/20/2017 23:09:55 PAGE 2   
+
+  56          {
+  57   1        uint ms1;
+  58   1        switch(ms){
+  59   2          case 10: ms1 = 210;break;
+  60   2          case 9: ms1 = 105;break;
+  61   2          case 8: ms1 = 70;break;
+  62   2          case 7: ms1 = 51;break;
+  63   2          case 6: ms1 = 42;break;
+  64   2          case 5: ms1 = 36;break;
+  65   2          case 4: ms1 = 32;break;
+  66   2          case 3: ms1 = 26;break;
+  67   2          case 2: ms1 = 22;break;
+  68   2          case 1: ms1 = 20;break;
+  69   2        }
+  70   1        PWM = 1;
+  71   1        delay_ms(ms1);
+  72   1        PWM = 0;
+  73   1        delay_ms(ms1);
+  74   1      }
+  75          
+  76          void print(const char *s, int pos)
+  77          {
+  78   1        uchar i;
+  79   1         lcd_pos(pos,0);             //设置显示位置为第一行的第1个字符
+  80   1           i = 0;
+  81   1          while(s[i] != '\0')
+  82   1           {                         //显示字符
+  83   2             lcd_wdat(s[i]);
+  84   2             i++;
+  85   2           }
+  86   1      }
+  87          
+  88          void LCDinit(void)
+  89          {
+  90   1          delay(10);                 //延时
+  91   1          wela=0;
+  92   1        dula=0; 
+  93   1          lcd_init();                //初始化LCD             
+  94   1        
+  95   1         print(dis1, 0);
+  96   1         print(dis2, 1);
+  97   1        print(dis3, 2);
+  98   1      }
+  99          
+ 100          
+ 101          
+ 102          
+ 103          void print_rate(void)
+ 104          {
+ 105   1        switch(ms){
+ 106   2          case 1: print("转速:300r/min", 1); break;
+ 107   2          case 2: print("转速:270r/min", 1); break;
+ 108   2          case 3: print("转速:240r/min", 1); break;
+ 109   2          case 4: print("转速:210r/min", 1); break;
+ 110   2          case 5: print("转速:180r/min", 1); break;
+ 111   2          case 6: print("转速:150r/min", 1); break;
+ 112   2          case 7: print("转速:120r/min", 1); break;
+ 113   2          case 8: print("转速:90r/min", 1); break;
+ 114   2          case 9: print("转速:60r/min", 1); break;
+ 115   2          case 10: print("转速:30r/min", 1); break;
+ 116   2        }
+ 117   1      }
+C51 COMPILER V9.52.0.0   PWM1                                                              02/20/2017 23:09:55 PAGE 3   
+
+ 118          
+ 119          void Time0_Init()          //定时器初始化
+ 120          {
+ 121   1        TMOD = 0x01;           //定时器0工作在方式1    
+ 122   1        IE   = 0x82;
+ 123   1        TH0  = 0xee;
+ 124   1        TL0  = 0x00;     //11.0592MZ晶振，5ms
+ 125   1      //      TR0=1;                 //定时器开始
+ 126   1      }
+ 127          void Time0_Int() interrupt 1 //中断程序
+ 128          {
+ 129   1        count=(count+1); 
+ 130   1        TH0  = 0xee;             //重新赋值
+ 131   1        TL0  = 0x00;
+ 132   1        if(count > t){              //判断0.5ms次数是否小于角度标识
+ 133   2           EN = 0;                  //确实小于，PWM输出高电平
+ 134   2           count = 0;
+ 135   2         }
+ 136   1                   //0.5ms次数加1
+ 137   1       //   count=count%40;     //次数始终保持为40 即保持周期为20ms
+ 138   1      }
+ 139            
+ 140          
+ 141          void com_init()
+ 142          {
+ 143   1        SCON = 0x50;
+ 144   1        PCON = 0x00;
+ 145   1        
+ 146   1        TMOD |= 0x20;
+ 147   1        TH1 = 0XFD;
+ 148   1        TL1 = 0XFD;
+ 149   1        TR1 = 1;
+ 150   1        ES = 1;
+ 151   1      }
+ 152          
+ 153          void serial() interrupt 4
+ 154          {
+ 155   1        EA = 0;
+ 156   1        ES = 0;
+ 157   1        RI = 0;
+ 158   1        buf = SBUF;
+ 159   1        switch (buf) {
+ 160   2          case 'A':
+ 161   2            ++ms;
+ 162   2            if(ms > 10)
+ 163   2              ms = 10;
+ 164   2            print_rate(); 
+ 165   2            break;
+ 166   2          case 'B':
+ 167   2            --ms;
+ 168   2            if(ms < 1)
+ 169   2              ms = 1;
+ 170   2            print_rate();
+ 171   2            break;
+ 172   2            
+ 173   2            case 'C':
+ 174   2            {
+ 175   3              DIR = ~DIR;
+ 176   3            if(DIR)
+ 177   3              print("方向:+", 2);
+ 178   3            else
+ 179   3              print("方向:-", 2);
+C51 COMPILER V9.52.0.0   PWM1                                                              02/20/2017 23:09:55 PAGE 4   
+
+ 180   3          }
+ 181   2            break;
+ 182   2            
+ 183   2          case 'D':
+ 184   2            ++angle;
+ 185   2            if(angle > 200)
+ 186   2              angle = 200;
+ 187   2            print_angle();
+ 188   2            break;
+ 189   2          case 'E':
+ 190   2            --angle;
+ 191   2            if(angle <= 0)
+ 192   2              angle = 0;
+ 193   2            print_angle();
+ 194   2            break;
+ 195   2          case 'F':
+ 196   2            EN = ~EN;
+ 197   2            break;
+ 198   2          default:
+ 199   2      //      BEEP = 0;
+ 200   2            break;
+ 201   2            
+ 202   2      /*       case 0x31:  P1=0xfe;BEEP=1;break;  //???1,???LED?         
+ 203   2            case 0x32:  P1=0xfd;BEEP=1;break;  //???2,???LED?        
+ 204   2            case 0x33:  P1=0xfb;BEEP=1;break;  //???3,???LED?        
+ 205   2            case 0x34:  P1=0xf7;BEEP=1;break;  //???4,???LED?       
+ 206   2            case 0x35:  P1=0xef;BEEP=1;break;  //???5,???LED?            
+ 207   2            case 0x36:  P1=0xdf;BEEP=1;break;  //???5,???LED?                   
+ 208   2            case 0x37:  P1=0xbf;BEEP=1;break;  //???5,???LED?
+ 209   2          case 0x38:  P1=0x7f;BEEP=1;break;  //???5,???LED?
+ 210   2          default:    BEEP=0;P1=0xff;break;  //???????,????   */     
+ 211   2      
+ 212   2        }
+ 213   1        ES = 1;
+ 214   1        EA = 1;
+ 215   1      }
+ 216          
+ 217          
+ 218          int main()
+ 219          {
+ 220   1        uchar k;
+ 221   1      //  char string[100] = "";
+ 222   1        float t1 = 0.0;
+ 223   1        EN = 0;
+ 224   1        DIR = 1;
+ 225   1        PWM = 0;
+ 226   1        RD = 0;
+ 227   1        LCDinit();
+ 228   1        Time0_Init();
+ 229   1        com_init();
+ 230   1      
+ 231   1      //  sprintf(string, "hello world");
+ 232   1        while(1){
+ 233   2          EA = 1;
+ 234   2          k = keyscan();
+ 235   2          if(k == 1){
+ 236   3            DIR = ~DIR;
+ 237   3            if(DIR)
+ 238   3              print("方向:+", 2);
+ 239   3            else
+ 240   3              print("方向:-", 2);
+ 241   3            }
+C51 COMPILER V9.52.0.0   PWM1                                                              02/20/2017 23:09:55 PAGE 5   
+
+ 242   2            if(k == 4){
+ 243   3            ++ms;
+ 244   3            if(ms > 10)
+ 245   3              ms = 10;
+ 246   3            print_rate();
+ 247   3          }
+ 248   2          if(k == 3){
+ 249   3            --ms;
+ 250   3            if(ms < 1)
+ 251   3              ms = 1;
+ 252   3            print_rate();
+ 253   3          }
+ 254   2          if(k == 5){
+ 255   3              ++angle;
+ 256   3              if(angle > 200)
+ 257   3                angle = 200;
+ 258   3              print_angle();
+ 259   3          }
+ 260   2          if(k == 6){
+ 261   3              --angle;
+ 262   3              if(angle <= 0)
+ 263   3                angle = 0;
+ 264   3              print_angle();
+ 265   3          }
+ 266   2      
+ 267   2          if(k == 10){
+ 268   3              angle += 20;
+ 269   3              if(angle > 200)
+ 270   3                angle = 200;
+ 271   3              print_angle();
+ 272   3          }
+ 273   2          if(k == 11){
+ 274   3              angle -= 20;
+ 275   3              if(angle <= 0)
+ 276   3                angle = 0;
+ 277   3              print_angle();
+ 278   3          }
+ 279   2      
+ 280   2          if(k == 2)
+ 281   2            EN = ~EN;
+ 282   2      
+ 283   2          if(angle != 0) {
+ 284   3            TR0 = 1;
+ 285   3            t1 = (angle * 0.5) / (5.5 - 0.5 * ms) ;
+ 286   3            t = (t1 / 0.5) * 100;
+ 287   3          } else {
+ 288   3            TR0 = 0;      //关闭中断 无穷次循环
+ 289   3          }
+ 290   2          while(EN){
+ 291   3            EA = 1;
+ 292   3            Motor_Go(ms);
+ 293   3      
+ 294   3            k = keyscan();
+ 295   3            if(k == 2){
+ 296   4              EN = ~EN;
+ 297   4              TR0 = 0;
+ 298   4              count = 0;
+ 299   4              }
+ 300   3          /*  
+ 301   3            if(k == 1){
+ 302   3              DIR = ~DIR;
+ 303   3              if(DIR)
+C51 COMPILER V9.52.0.0   PWM1                                                              02/20/2017 23:09:55 PAGE 6   
+
+ 304   3                print("方向:+", 2);
+ 305   3              else
+ 306   3                print("方向:-", 2);
+ 307   3            }
+ 308   3          
+ 309   3            if(k == 4){
+ 310   3              ++ms;
+ 311   3              if(ms > 10)
+ 312   3                ms = 10;
+ 313   3              print_rate();
+ 314   3            }
+ 315   3            if(k == 3){
+ 316   3              --ms;
+ 317   3              if(ms < 1)
+ 318   3                ms = 1;
+ 319   3              print_rate();
+ 320   3            }*/
+ 321   3            EA = 0;
+ 322   3          }
+ 323   2          
+ 324   2        }
+ 325   1      }
+ 326          
+ 327          uchar keyscan()
+ 328          {
+ 329   1            num = 16;
+ 330   1            key_port=0xfe;
+ 331   1            temp=key_port;
+ 332   1            temp=temp&0xf0;
+ 333   1            while(temp!=0xf0)
+ 334   1              {
+ 335   2                delay_1ms(10);
+ 336   2                temp=key_port;
+ 337   2                temp=temp&0xf0;
+ 338   2                while(temp!=0xf0)
+ 339   2                {
+ 340   3                  temp=key_port;
+ 341   3                switch(temp)
+ 342   3                  {
+ 343   4                    case 0xee:num=1;
+ 344   4                      break;
+ 345   4                    case 0xde:num=2;
+ 346   4                      break;
+ 347   4                    case 0xbe:num=3;
+ 348   4                      break;
+ 349   4                    case 0x7e:num=10;
+ 350   4                      break;
+ 351   4                  }
+ 352   3                while(temp!=0xf0)
+ 353   3                  {
+ 354   4                    temp=key_port;
+ 355   4                    temp=temp&0xf0;
+ 356   4                  }
+ 357   3                }
+ 358   2              }
+ 359   1      
+ 360   1            key_port=0xfd;
+ 361   1            temp=key_port;
+ 362   1            temp=temp&0xf0;
+ 363   1            while(temp!=0xf0)
+ 364   1              {
+ 365   2                delay_1ms(10);
+C51 COMPILER V9.52.0.0   PWM1                                                              02/20/2017 23:09:55 PAGE 7   
+
+ 366   2                temp=key_port;
+ 367   2                temp=temp&0xf0;
+ 368   2                while(temp!=0xf0)
+ 369   2                {
+ 370   3                  temp=key_port;
+ 371   3                switch(temp)
+ 372   3                  {
+ 373   4                    case 0xed:num=4;
+ 374   4                      break;
+ 375   4                    case 0xdd:num=5;
+ 376   4                      break;
+ 377   4                    case 0xbd:num=6;
+ 378   4                      break;
+ 379   4                    case 0x7d:num=11;
+ 380   4                      break;
+ 381   4                  }
+ 382   3                while(temp!=0xf0)
+ 383   3                  {
+ 384   4                    temp=key_port;
+ 385   4                    temp=temp&0xf0;
+ 386   4                  }
+ 387   3                }
+ 388   2              }
+ 389   1      
+ 390   1      
+ 391   1            key_port=0xfb;
+ 392   1            temp=key_port;
+ 393   1            temp=temp&0xf0;
+ 394   1            while(temp!=0xf0)
+ 395   1              {
+ 396   2                delay_1ms(10);
+ 397   2                temp=key_port;
+ 398   2                temp=temp&0xf0;
+ 399   2                while(temp!=0xf0)
+ 400   2                {
+ 401   3                  temp=key_port;
+ 402   3                switch(temp)
+ 403   3                  {
+ 404   4                    case 0xeb:num=7;
+ 405   4                      break;
+ 406   4                    case 0xdb:num=8;
+ 407   4                      break;
+ 408   4                    case 0xbb:num=9;
+ 409   4                      break;
+ 410   4                    case 0x7b:num=12;
+ 411   4                      break;
+ 412   4                  }
+ 413   3                while(temp!=0xf0)
+ 414   3                  {
+ 415   4                    temp=key_port;
+ 416   4                    temp=temp&0xf0;
+ 417   4                  }
+ 418   3                }
+ 419   2              }
+ 420   1      
+ 421   1      
+ 422   1            key_port=0xf7;
+ 423   1            temp=key_port;
+ 424   1            temp=temp&0xf0;
+ 425   1            while(temp!=0xf0)
+ 426   1              {
+ 427   2                delay_1ms(10);
+C51 COMPILER V9.52.0.0   PWM1                                                              02/20/2017 23:09:55 PAGE 8   
+
+ 428   2                temp=key_port;
+ 429   2                temp=temp&0xf0;
+ 430   2                while(temp!=0xf0)
+ 431   2                {
+ 432   3                  temp=key_port;
+ 433   3                switch(temp)
+ 434   3                  {
+ 435   4                    case 0xe7:num=14;
+ 436   4                      break;
+ 437   4                    case 0xd7:num=0;
+ 438   4                      break;
+ 439   4                    case 0xb7:num=15;
+ 440   4                      break;
+ 441   4                    case 0x77:num=13;
+ 442   4                      break;
+ 443   4                  }
+ 444   3                while(temp!=0xf0)
+ 445   3                  {
+ 446   4                    temp=key_port;
+ 447   4                    temp=temp&0xf0;
+ 448   4                  }
+ 449   3                }
+ 450   2              }                   
+ 451   1      
+ 452   1          return num;
+ 453   1      }
+ 454          
+ 455          void print_angle(void)
+ 456          {
+ 457   1      /*  int v;
+ 458   1        float ang;
+ 459   1        v = 330 - 30 * ms;
+ 460   1        sprintf(rate, "转速:%dr/min", v);
+ 461   1        print(rate, 1);
+ 462   1        ang = 5.5 - 0.5 * ms;
+ 463   1        sprintf(angle, "转角:%f圈", ang);
+ 464   1        print(angle, 0);*/
+ 465   1        switch(angle){
+ 466   2          case 0: print("转角:+00 ", 0);  break;
+ 467   2          case 1: print("转角:0.5 圈", 0); break;
+ 468   2          case 2: print("转角:1.0 圈", 0); break;
+ 469   2          case 3: print("转角:1.5 圈", 0); break;
+ 470   2          case 4: print("转角:2.0 圈", 0); break;
+ 471   2          case 5: print("转角:2.5 圈", 0); break;
+ 472   2          case 6: print("转角:3.0 圈", 0); break;
+ 473   2          case 7: print("转角:3.5 圈", 0); break;
+ 474   2          case 8: print("转角:4.0 圈", 0); break;
+ 475   2          case 9: print("转角:4.5 圈", 0); break;
+ 476   2          case 10: print("转角:5.0 圈", 0); break;
+ 477   2      
+ 478   2          case 11: print("转角:5.5 圈", 0); break;
+ 479   2          case 12: print("转角:6.0 圈", 0); break;
+ 480   2          case 13: print("转角:6.5 圈", 0); break;
+ 481   2          case 14: print("转角:7.0 圈", 0); break;
+ 482   2          case 15: print("转角:7.5 圈", 0); break;
+ 483   2          case 16: print("转角:8.0 圈", 0); break;
+ 484   2          case 17: print("转角:8.5 圈", 0); break;
+ 485   2          case 18: print("转角:9.0 圈", 0); break;
+ 486   2          case 19: print("转角:9.5 圈", 0); break;
+ 487   2          case 20: print("转角:10.0圈", 0); break;
+ 488   2          
+ 489   2          default : print("wrong input", 0); break;
+C51 COMPILER V9.52.0.0   PWM1                                                              02/20/2017 23:09:55 PAGE 9   
+
+ 490   2      /*
+ 491   2          case 21: print("转角:10.5圈", 0); break;
+ 492   2          case 22: print("转角:11.0圈", 0); break;
+ 493   2          case 23: print("转角:11.5圈", 0); break;
+ 494   2          case 24: print("转角:12.0圈", 0); break;
+ 495   2          case 25: print("转角:12.5圈", 0); break;
+ 496   2          case 26: print("转角:13.0圈", 0); break;
+ 497   2          case 27: print("转角:13.5圈", 0); break;
+ 498   2          case 28: print("转角:14.0圈", 0); break;
+ 499   2          case 29: print("转角:14.5圈", 0); break;
+ 500   2          case 30: print("转角:15.0圈", 0); break;
+ 501   2      
+ 502   2          case 31: print("转角:15.5圈", 0); break;
+ 503   2          case 32: print("转角:16.0圈", 0); break;
+ 504   2          case 33: print("转角:16.5圈", 0); break;
+ 505   2          case 34: print("转角:17.0圈", 0); break;
+ 506   2          case 35: print("转角:17.5圈", 0); break;
+ 507   2          case 36: print("转角:18.0圈", 0); break;
+ 508   2          case 37: print("转角:18.5圈", 0); break;
+ 509   2          case 38: print("转角:19.0圈", 0); break;
+ 510   2          case 39: print("转角:19.5圈", 0); break;
+ 511   2          case 40: print("转角:20.0圈", 0); break;
+ 512   2      
+ 513   2          case 41: print("转角:20.5圈", 0); break;
+ 514   2          case 42: print("转角:21.0圈", 0); break;
+ 515   2          case 43: print("转角:21.5圈", 0); break;
+ 516   2          case 44: print("转角:22.0圈", 0); break;
+ 517   2          case 45: print("转角:22.5圈", 0); break;
+ 518   2          case 46: print("转角:23.0圈", 0); break;
+ 519   2          case 47: print("转角:23.5圈", 0); break;
+ 520   2          case 48: print("转角:24.0圈", 0); break;
+ 521   2          case 49: print("转角:24.5圈", 0); break;
+ 522   2          case 50: print("转角:25.0圈", 0); break;
+ 523   2      
+ 524   2          case 51: print("转角:25.5圈", 0); break;
+ 525   2          case 52: print("转角:26.0圈", 0); break;
+ 526   2          case 53: print("转角:26.5圈", 0); break;
+ 527   2          case 54: print("转角:27.0圈", 0); break;
+ 528   2          case 55: print("转角:27.5圈", 0); break;
+ 529   2          case 56: print("转角:28.0圈", 0); break;
+ 530   2          case 57: print("转角:28.5圈", 0); break;
+ 531   2          case 58: print("转角:29.0圈", 0); break;
+ 532   2          case 59: print("转角:29.5圈", 0); break;
+ 533   2          case 60: print("转角:30.0圈", 0); break;
+ 534   2      
+ 535   2          case 61: print("转角:30.5圈", 0); break;
+ 536   2          case 62: print("转角:31.0圈", 0); break;
+ 537   2          case 63: print("转角:31.5圈", 0); break;
+ 538   2          case 64: print("转角:32.0圈", 0); break;
+ 539   2          case 65: print("转角:32.5圈", 0); break;
+ 540   2          case 66: print("转角:33.0圈", 0); break;
+ 541   2          case 67: print("转角:33.5圈", 0); break;
+ 542   2          case 68: print("转角:34.0圈", 0); break;
+ 543   2          case 69: print("转角:34.5圈", 0); break;
+ 544   2          case 70: print("转角:35.0圈", 0); break;
+ 545   2      
+ 546   2          case 71: print("转角:35.5圈", 0); break;
+ 547   2          case 72: print("转角:36.0圈", 0); break;
+ 548   2          case 73: print("转角:36.5圈", 0); break;
+ 549   2          case 74: print("转角:37.0圈", 0); break;
+ 550   2          case 75: print("转角:37.5圈", 0); break;
+ 551   2          case 76: print("转角:38.0圈", 0); break;
+C51 COMPILER V9.52.0.0   PWM1                                                              02/20/2017 23:09:55 PAGE 10  
+
+ 552   2          case 77: print("转角:38.5圈", 0); break;
+ 553   2          case 78: print("转角:39.0圈", 0); break;
+ 554   2          case 79: print("转角:39.5圈", 0); break;
+ 555   2          case 80: print("转角:40.0圈", 0); break;
+ 556   2      
+ 557   2          case 81: print("转角:40.5圈", 0); break;
+ 558   2          case 82: print("转角:41.0圈", 0); break;
+ 559   2          case 83: print("转角:41.5圈", 0); break;
+ 560   2          case 84: print("转角:42.0圈", 0); break;
+ 561   2          case 85: print("转角:42.5圈", 0); break;
+ 562   2          case 86: print("转角:43.0圈", 0); break;
+ 563   2          case 87: print("转角:43.5圈", 0); break;
+ 564   2          case 88: print("转角:44.0圈", 0); break;
+ 565   2          case 89: print("转角:44.5圈", 0); break;
+ 566   2          case 90: print("转角:45.0圈", 0); break;
+ 567   2      
+ 568   2          case 91: print("转角:45.5圈", 0); break;
+ 569   2          case 92: print("转角:46.0圈", 0); break;
+ 570   2          case 93: print("转角:46.5圈", 0); break;
+ 571   2          case 94: print("转角:47.0圈", 0); break;
+ 572   2          case 95: print("转角:47.5圈", 0); break;
+ 573   2          case 96: print("转角:48.0圈", 0); break;
+ 574   2          case 97: print("转角:48.5圈", 0); break;
+ 575   2          case 98: print("转角:49.0圈", 0); break;
+ 576   2          case 99: print("转角:49.5圈", 0); break;
+ 577   2          case 100: print("转角:50.0圈", 0); break;
+ 578   2          
+ 579   2          case 101: print("转角:50.5圈", 0); break;
+ 580   2          case 102: print("转角:51.0圈", 0); break;
+ 581   2          case 103: print("转角:51.5圈", 0); break;
+ 582   2          case 104: print("转角:52.0圈", 0); break;
+ 583   2          case 105: print("转角:52.5圈", 0); break;
+ 584   2          case 106: print("转角:53.0圈", 0); break;
+ 585   2          case 107: print("转角:53.5圈", 0); break;
+ 586   2          case 108: print("转角:54.0圈", 0); break;
+ 587   2          case 109: print("转角:54.5圈", 0); break;
+ 588   2          case 110: print("转角:55.0圈", 0); break;
+ 589   2          case 111: print("转角:55.5圈", 0); break;
+ 590   2          case 112: print("转角:56.0圈", 0); break;
+ 591   2          case 113: print("转角:56.5圈", 0); break;
+ 592   2          case 114: print("转角:57.0圈", 0); break;
+ 593   2          case 115: print("转角:57.5圈", 0); break;
+ 594   2          case 116: print("转角:58.0圈", 0); break;
+ 595   2          case 117: print("转角:58.5圈", 0); break;
+ 596   2          case 118: print("转角:59.0圈", 0); break;
+ 597   2          case 119: print("转角:59.5圈", 0); break;
+ 598   2          case 120: print("转角:60.0圈", 0); break;
+ 599   2          case 121: print("转角:60.5圈", 0); break;
+ 600   2          case 122: print("转角:61.0圈", 0); break;
+ 601   2          case 123: print("转角:61.5圈", 0); break;
+ 602   2          case 124: print("转角:62.0圈", 0); break;
+ 603   2          case 125: print("转角:62.5圈", 0); break;
+ 604   2          case 126: print("转角:63.0圈", 0); break;
+ 605   2          case 127: print("转角:63.5圈", 0); break;
+ 606   2          case 128: print("转角:64.0圈", 0); break;
+ 607   2          case 129: print("转角:64.5圈", 0); break;
+ 608   2          case 130: print("转角:65.0圈", 0); break;
+ 609   2          case 131: print("转角:65.5圈", 0); break;
+ 610   2          case 132: print("转角:66.0圈", 0); break;
+ 611   2          case 133: print("转角:66.5圈", 0); break;
+ 612   2          case 134: print("转角:67.0圈", 0); break;
+ 613   2          case 135: print("转角:67.5圈", 0); break;
+C51 COMPILER V9.52.0.0   PWM1                                                              02/20/2017 23:09:55 PAGE 11  
+
+ 614   2          case 136: print("转角:68.0圈", 0); break;
+ 615   2          case 137: print("转角:68.5圈", 0); break;
+ 616   2          case 138: print("转角:69.0圈", 0); break;
+ 617   2          case 139: print("转角:69.5圈", 0); break;
+ 618   2          case 140: print("转角:70.0圈", 0); break;
+ 619   2          case 141: print("转角:70.5圈", 0); break;
+ 620   2          case 142: print("转角:71.0圈", 0); break;
+ 621   2          case 143: print("转角:71.5圈", 0); break;
+ 622   2          case 144: print("转角:72.0圈", 0); break;
+ 623   2          case 145: print("转角:72.5圈", 0); break;
+ 624   2          case 146: print("转角:73.0圈", 0); break;
+ 625   2          case 147: print("转角:73.5圈", 0); break;
+ 626   2          case 148: print("转角:74.0圈", 0); break;
+ 627   2          case 149: print("转角:74.5圈", 0); break;
+ 628   2          case 150: print("转角:75.0圈", 0); break;
+ 629   2          case 151: print("转角:75.5圈", 0); break;
+ 630   2          case 152: print("转角:76.0圈", 0); break;
+ 631   2          case 153: print("转角:76.5圈", 0); break;
+ 632   2          case 154: print("转角:77.0圈", 0); break;
+ 633   2          case 155: print("转角:77.5圈", 0); break;
+ 634   2          case 156: print("转角:78.0圈", 0); break;
+ 635   2          case 157: print("转角:78.5圈", 0); break;
+ 636   2          case 158: print("转角:79.0圈", 0); break;
+ 637   2          case 159: print("转角:79.5圈", 0); break;
+ 638   2          case 160: print("转角:80.0圈", 0); break;
+ 639   2          case 161: print("转角:80.5圈", 0); break;
+ 640   2          case 162: print("转角:81.0圈", 0); break;
+ 641   2          case 163: print("转角:81.5圈", 0); break;
+ 642   2          case 164: print("转角:82.0圈", 0); break;
+ 643   2          case 165: print("转角:82.5圈", 0); break;
+ 644   2          case 166: print("转角:83.0圈", 0); break;
+ 645   2          case 167: print("转角:83.5圈", 0); break;
+ 646   2          case 168: print("转角:84.0圈", 0); break;
+ 647   2          case 169: print("转角:84.5圈", 0); break;
+ 648   2          case 170: print("转角:85.0圈", 0); break;
+ 649   2          case 171: print("转角:85.5圈", 0); break;
+ 650   2          case 172: print("转角:86.0圈", 0); break;
+ 651   2          case 173: print("转角:86.5圈", 0); break;
+ 652   2          case 174: print("转角:87.0圈", 0); break;
+ 653   2          case 175: print("转角:87.5圈", 0); break;
+ 654   2          case 176: print("转角:88.0圈", 0); break;
+ 655   2          case 177: print("转角:88.5圈", 0); break;
+ 656   2          case 178: print("转角:89.0圈", 0); break;
+ 657   2          case 179: print("转角:89.5圈", 0); break;
+ 658   2          case 180: print("转角:90.0圈", 0); break;
+ 659   2          case 181: print("转角:90.5圈", 0); break;
+ 660   2          case 182: print("转角:91.0圈", 0); break;
+ 661   2          case 183: print("转角:91.5圈", 0); break;
+ 662   2          case 184: print("转角:92.0圈", 0); break;
+ 663   2          case 185: print("转角:92.5圈", 0); break;
+ 664   2          case 186: print("转角:93.0圈", 0); break;
+ 665   2          case 187: print("转角:93.5圈", 0); break;
+ 666   2          case 188: print("转角:94.0圈", 0); break;
+ 667   2          case 189: print("转角:94.5圈", 0); break;
+ 668   2          case 190: print("转角:95.0圈", 0); break;
+ 669   2          case 191: print("转角:95.5圈", 0); break;
+ 670   2          case 192: print("转角:96.0圈", 0); break;
+ 671   2          case 193: print("转角:96.5圈", 0); break;
+ 672   2          case 194: print("转角:97.0圈", 0); break;
+ 673   2          case 195: print("转角:97.5圈", 0); break;
+ 674   2          case 196: print("转角:98.0圈", 0); break;
+ 675   2          case 197: print("转角:98.5圈", 0); break;
+C51 COMPILER V9.52.0.0   PWM1                                                              02/20/2017 23:09:55 PAGE 12  
+
+ 676   2          case 198: print("转角:99.0圈", 0); break;
+ 677   2          case 199: print("转角:99.5圈", 0); break;
+ 678   2          case 200: print("转角:100圈", 0); break;*/
+ 679   2        }
+ 680   1      }
+ 681          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1990    ----
+   CONSTANT SIZE    =    444    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     17       9
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----       1
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
