@@ -25,6 +25,8 @@ uchar num,temp;
 
 
 void print_angle(void);
+void adjust_parm_key(uchar k);
+void adjust_parm_temp(void);
 
 void delay_ms(uint z) //delay0.01ms
 {
@@ -219,7 +221,6 @@ int main()
 {
 	uchar k;
 //	char string[100] = "";
-	float t1 = 0.0;
 	EN = 0;
 	DIR = 1;
 	PWM = 0;
@@ -231,7 +232,66 @@ int main()
 //	sprintf(string, "hello world");
 	while(1){
 		EA = 1;
-		k = keyscan();
+		if (ENABLE_TEMP_CTRL == 0) {
+			k = keyscan();
+			adjust_parm_key(k);
+		} else {
+			adjust_parm_temp();
+		}
+		while(EN){
+			EA = 1;
+			Motor_Go(ms);
+
+			k = keyscan();
+			if(k == 2){
+				EN = ~EN;
+				TR0 = 0;
+				count = 0;
+				}
+		/*	
+			if(k == 1){
+				DIR = ~DIR;
+				if(DIR)
+					print("方向:+", 2);
+				else
+					print("方向:-", 2);
+			}
+		
+			if(k == 4){
+				++ms;
+				if(ms > 10)
+					ms = 10;
+				print_rate();
+			}
+			if(k == 3){
+				--ms;
+				if(ms < 1)
+					ms = 1;
+				print_rate();
+			}*/
+			EA = 0;
+		}
+		
+	}
+}
+
+void adjust_parm_temp(void)
+{
+	int temp = 0;
+
+	temp = read_temp();
+	TR0 = 0;
+	EN = 1;
+	ms = 11 - (temp / 10);
+	if (ms > 10)
+		ms = 10;
+	else if (ms < 1)
+		ms = 1;
+}
+
+void adjust_parm_key(uchar k)
+{
+	float t1 = 0.0;
 		if(k == 1){
 			DIR = ~DIR;
 			if(DIR)
@@ -287,41 +347,6 @@ int main()
 		} else {
 			TR0 = 0;			//关闭中断 无穷次循环
 		}
-		while(EN){
-			EA = 1;
-			Motor_Go(ms);
-
-			k = keyscan();
-			if(k == 2){
-				EN = ~EN;
-				TR0 = 0;
-				count = 0;
-				}
-		/*	
-			if(k == 1){
-				DIR = ~DIR;
-				if(DIR)
-					print("方向:+", 2);
-				else
-					print("方向:-", 2);
-			}
-		
-			if(k == 4){
-				++ms;
-				if(ms > 10)
-					ms = 10;
-				print_rate();
-			}
-			if(k == 3){
-				--ms;
-				if(ms < 1)
-					ms = 1;
-				print_rate();
-			}*/
-			EA = 0;
-		}
-		
-	}
 }
 
 uchar keyscan()
